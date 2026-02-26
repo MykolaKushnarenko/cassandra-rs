@@ -3,15 +3,15 @@
 //! This module contains the `Server` struct which manages incoming TCP connections,
 //! dispatches messages to appropriate handlers, and maintains global storage.
 
-use crate::connection::Connection;
-use crate::error::{AppResult, Error};
 use crate::handlers::Handler;
-use crate::storage::HashSetStorage;
+use crate::storage::HashMapStorage;
 use crate::{handlers, storage};
 use add_handler::AddHandler;
 use check_handler::CheckHandler;
 use handlers::{add_handler, check_handler};
-use serde::{Deserialize, Serialize};
+use shared::connection::Connection;
+use shared::error::AppResult;
+use shared::protocol::types::Request;
 use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
@@ -20,24 +20,6 @@ use storage::GlobalStorage;
 
 /// The address of the server.
 const LOCALHOST: &str = "localhost";
-
-/// Represents a message received from a client.
-#[derive(Debug, Deserialize)]
-pub(crate) struct InboundMessage {
-    /// The command name (e.g., "add", "check").
-    pub command: String,
-    /// Arguments for the command.
-    pub args: Vec<String>,
-}
-
-/// Represents a message to be sent to a client.
-#[derive(Debug, Serialize)]
-pub(crate) struct OutboundMessage {
-    /// The status of the operation (e.g., "OK", "ERROR").
-    pub status: String,
-    /// The result string to be returned to the client.
-    pub result: String,
-}
 
 /// The main server struct.
 ///
@@ -49,7 +31,7 @@ pub(crate) struct Server {
 impl Server {
     /// Creates a new `Server` instance with empty storage.
     pub(crate) fn new() -> Self {
-        let storage = GlobalStorage::new(Mutex::new(HashSetStorage::<String>::new()));
+        let storage = GlobalStorage::new(Mutex::new(HashMapStorage::new()));
 
         Self {
             storage
@@ -139,36 +121,21 @@ impl Server {
 
     /// Receives, processes, and responds to a single message from a connection.
     fn process_message(connection: &mut Connection, handlers:&mut HashMap<String, Box<dyn Handler<String>>>) -> AppResult<()> {
-        let message = connection.receive::<InboundMessage>()?;
+        let request = connection.receive_request()?;
 
-        let command = message.command.as_str();
-
-        let look_up_handler = handlers.get_mut(command);
-        let handler;
-        
-        match look_up_handler {
-            Some(instance) => {handler = instance},
-            None => {
-                let error_response = OutboundMessage {
-                    status: "ERROR".to_string(),
-                    result: format!("Unknown command: {}", command)
-                };
-                connection.send(&error_response)?;
-                return Err(Error::UnknownCommand(command.to_string()))
+        let response;
+        match request {
+            Request::Add(value) => {
+                let add_handler = handlers.get_mut("add").unwrap();
+                response = add_handler.handle(value)?;
+            }
+            Request::Check(value) => {
+                let check_handler = handlers.get_mut("check").unwrap();
+                response = check_handler.handle(value)?;
             }
         }
 
-        if message.args.is_empty() || message.args.iter().filter(|arg| arg.parse::<f64>().is_err()).count() > 0 {
-            let error_response = OutboundMessage {
-                status: "ERROR".to_string(),
-                result: "Value should be of number type".to_string()
-            };
-            connection.send(&error_response)?;
-            return Err(Error::InvalidRequestContent);
-        }
-
-        let result =handler.handle(message.args.first().unwrap().to_string())?;
-        connection.send(&result)?;
+        connection.send_response(response)?;
         
         Ok(())
     }

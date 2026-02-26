@@ -2,9 +2,6 @@
 
 mod server;
 mod storage;
-mod protocol_parser;
-mod connection;
-mod error;
 mod handlers;
 
 use server::Server;

@@ -1,30 +1,16 @@
 mod consistent_hash;
-
 use crate::consistent_hash::{Cluster, ConsistentHashRing};
-use serde::{Deserialize, Serialize};
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::net::TcpStream;
 use text_colorizer::*;
+use shared::connection::Connection;
+use shared::protocol::types::Request;
 
 const NODES_ARG_KEY: &str = "--nodes=";
 
 const LOG_INFO: &str = "INFO";
 const LOG_ERROR: &str = "ERROR";
 const LOG_VERBOSE: &str = "VERBOSE";
-
-
-#[derive(Debug, Serialize, )]
-struct OutboundCommand{
-    command: String,
-    args: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(unused)]
-struct InboundMessage{
-    status: String,
-    result: String,
-}
 
 fn main() {
     let cluster = initialize_cluster_config();
@@ -39,7 +25,7 @@ fn main() {
 fn initialize_cluster_config() -> Cluster {
     let nodes = std::env::args()
         .find(|arg| arg.starts_with(NODES_ARG_KEY))
-        .expect("--node argument is required")
+        .expect("--nodes argument is required")
         .trim_start_matches(NODES_ARG_KEY)
         .split(",")
         .map(|s| s.to_string())
@@ -70,10 +56,19 @@ fn start_processing(mut hasher: ConsistentHashRing) {
 fn send(operation: &str, value: &str, hasher: &mut ConsistentHashRing) {
     let node_address = hasher.get_node_address(value);
 
-    let command = OutboundCommand {
-        command: String::from(operation),
-        args: vec![String::from(value.trim())]
-    };
+    let request;
+    match operation {
+        "add" => {
+            request = Request::Add(value.to_string());
+        }
+        "check" => {
+            request = Request::Check(value.to_string());
+        }
+        _ => {
+            eprintln!("{}: {}", LOG_ERROR.bright_red(), format!("Operation {} is not supported", operation).red().bold());
+            return;
+        }
+    }
 
     println!("{}: Sending {} to {}", LOG_VERBOSE, operation, node_address);
     let stream_result = TcpStream::connect(node_address);
@@ -87,20 +82,18 @@ fn send(operation: &str, value: &str, hasher: &mut ConsistentHashRing) {
         }
     }
 
-    let mut writer = std::io::BufWriter::new(&stream);
-    let mut reader = std::io::BufReader::new(&stream);
+    let mut connection = Connection::new(&stream);
 
-    let mut butes = serde_json::to_vec(&command).unwrap();
-    butes.push(0u8);
+    let response_result = connection.send_request_with_response(request);
 
-    writer.write_all(&butes).unwrap();
-    writer.flush().unwrap();
-
-    let mut response_bytes = Vec::<u8>::new();
-    reader.read_until(0u8, &mut response_bytes).unwrap();
-    response_bytes.pop();
-
-    let response: InboundMessage = serde_json::from_slice(&response_bytes).unwrap();
+    let response;
+    match response_result {
+        Ok(value) => { response = value},
+        Err(e) => {
+            eprintln!("{}: {}", LOG_ERROR.bright_red(), format!("Error occurred while processing message: {:?}", e).red().bold());
+            return;
+        }
+    }
 
     println!("{}: {}", LOG_VERBOSE, format!("Response: {:?}", response));
     std::io::stdout().flush().unwrap();

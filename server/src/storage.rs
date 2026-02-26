@@ -1,14 +1,13 @@
 //! Storage abstractions for the server.
 //!
-//! This module defines the `Storage` trait and a thread-safe `HashSetStorage` implementation.
+//! This module defines the `Storage` trait and a thread-safe `HashMap` implementation.
 
-use std::collections::HashSet;
-use std::hash::Hash;
+use shared::consistent_hash::ConsistentHash;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 /// A thread-safe, shared storage type.
-pub type GlobalStorage<T> = Arc<Mutex<HashSetStorage<T>>>;
-
+pub type GlobalStorage<T> = Arc<Mutex<HashMapStorage<T>>>;
 
 /// A trait for basic storage operations.
 pub trait Storage<T> {
@@ -20,29 +19,29 @@ pub trait Storage<T> {
     fn get_count(&self) -> usize;
 }
 
-/// A storage implementation based on a `HashSet`.
-pub struct HashSetStorage<T> {
-    data: HashSet<T>
+pub struct HashMapStorage<T> {
+    data: HashMap<u64, T>
 }
 
-impl<T> HashSetStorage<T> {
-    /// Creates a new, empty `HashSetStorage`.
+impl HashMapStorage<String> {
     pub fn new() -> Self {
-        Self { data: HashSet::new() }
+        Self { data: HashMap::new() }
     }
 }
 
-impl<T: Eq + Hash> Storage<T> for HashSetStorage<T> {
-    fn add(&mut self, value: T) -> bool {
-        self.data.insert(value)
+impl Storage<String> for HashMapStorage<String>  {
+    fn add(&mut self, value: String) -> bool {
+        let hash = ConsistentHash::calculate_hash(value.as_str());
+        let result = self.data.insert(hash, value);
+        result.is_none()
     }
 
-    fn check(&self, value: &T) -> bool {
-        self.data.contains(&value)
+    fn check(&self, value: &String) -> bool {
+        let hash = ConsistentHash::calculate_hash(value.as_str());
+        self.data.contains_key(&hash)
     }
-    
+
     fn get_count(&self) -> usize {
         self.data.len()
     }
 }
-
