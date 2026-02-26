@@ -1,9 +1,8 @@
 //! Handler for the "check" command.
 
-use std::hash::Hash;
-use crate::error::AppResult;
+use shared::error::AppResult;
+use shared::protocol::types::Response;
 use crate::handlers::Handler;
-use crate::server::OutboundMessage;
 use crate::storage::{GlobalStorage, Storage};
 
 /// A handler that checks if a value exists in the global storage.
@@ -11,20 +10,16 @@ pub struct CheckHandler<T> {
     storage: GlobalStorage<T>
 }
 
-impl<T: Eq + Hash + std::fmt::Display> Handler<T> for CheckHandler<T> {
-    fn handle(&mut self, value: T) -> AppResult<OutboundMessage> {
+impl Handler<String> for CheckHandler<String> {
+    fn handle(&mut self, value: String) -> AppResult<Response> {
         let storage = self.storage.lock().unwrap();
         
         let result = storage.check(&value);
         if result {
-            return  Ok(OutboundMessage { 
-                status: "OK".to_string(),
-                result: format!("Value: {} exists", value) })
+            return Ok(Response::Bool(true));
         }
 
-        Ok(OutboundMessage { 
-            status: "ERROR".to_string(),
-            result: format!("Value: {} doesn't exist", value) })
+        Ok(Response::String(format!("Value: {} doesn't exist", value)))
     }
 }
 

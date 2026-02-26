@@ -1,27 +1,22 @@
 //! Handler for the "add" command.
 
-use std::fmt::Display;
-use std::hash::Hash;
-use crate::error::AppResult;
 use crate::handlers::Handler;
-use crate::server::OutboundMessage;
 use crate::storage::{GlobalStorage, Storage};
+use shared::error::AppResult;
+use shared::protocol::types::Response;
 
 /// A handler that adds a value to the global storage.
 pub(crate) struct AddHandler<T> {
     storage: GlobalStorage<T>,
 }
 
-impl<T: Eq + Hash + Display + Clone> Handler<T> for AddHandler<T> {
-    fn handle(&mut self, value: T) -> AppResult<OutboundMessage> {
+impl Handler<String> for AddHandler<String> {
+    fn handle(&mut self, value: String) -> AppResult<Response> {
         let mut storage = self.storage.lock().unwrap();
 
         storage.add(value.clone());
 
-        Ok(OutboundMessage {
-            status: "OK".to_string(),
-            result: format!("Added {}, there are currently {}", value, storage.get_count())
-        })
+        Ok(Response::String(format!("Added {}, there are currently {}", value, storage.get_count())))
     }
 }
 

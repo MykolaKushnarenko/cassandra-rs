@@ -16,4 +16,4 @@ pub enum Error {
 }
 
 /// A specialized Result type for application operations.
-pub(crate) type AppResult<T> = Result<T, Error>;
+pub type AppResult<T> = Result<T, Error>;

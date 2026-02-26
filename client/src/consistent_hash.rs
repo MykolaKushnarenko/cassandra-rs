@@ -1,5 +1,5 @@
+use shared::consistent_hash::ConsistentHash;
 use std::collections::BTreeMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
 
 const REPLICAS: usize = 10;
 
@@ -19,7 +19,7 @@ impl<'a> ConsistentHashRing<'a> {
         for node in cluster.nodes.iter() {
             for i in 0..REPLICAS {
                 let key = format!("{}:{}", node, i);
-                let node_hash = Self::calculate_hash(&key);
+                let node_hash = ConsistentHash::calculate_hash(&key);
                 ring.insert(node_hash, node);
             }
         }
@@ -30,7 +30,7 @@ impl<'a> ConsistentHashRing<'a> {
     }
 
     pub fn get_node_address(&self, value: &str) -> &str {
-        let hash = Self::calculate_hash(value);
+        let hash = ConsistentHash::calculate_hash(value);
 
         let selected_node = self.ring.range(hash..)
             .next()
@@ -39,10 +39,23 @@ impl<'a> ConsistentHashRing<'a> {
 
         selected_node.unwrap().as_str()
     }
+}
 
-    fn calculate_hash(value: &str) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
+#[cfg(test)]
+mod tests {
+    use crate::consistent_hash::{Cluster, ConsistentHashRing};
+
+    #[test]
+    fn test_get_node_address() {
+        let nodes_ips = vec![
+            "127.0.0.1:3000".to_string(),
+            "127.0.0.1:3001".to_string(),
+            "127.0.0.1:3002".to_string()];
+
+        let cluster = Cluster { nodes: nodes_ips };
+
+        let ring = ConsistentHashRing::new(&cluster);
+
+        assert_eq!(ring.get_node_address("test_key"), "127.0.0.1:3002");
     }
 }
