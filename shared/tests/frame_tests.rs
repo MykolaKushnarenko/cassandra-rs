@@ -1,15 +1,22 @@
 #![cfg(test)]
 
 use io::Cursor;
-use std::io;
 use shared::protocol::frame::{Flags, Frame, Opcode, Version};
+use std::io;
 
 #[test]
 fn new_should_create_frame() {
     let actual = vec![0u8; 1];
     let expected = actual.clone();
 
-    let frame = Frame::new(Version::Request, None, None, Opcode::Query, actual.len() as u32, actual);
+    let frame = Frame::new(
+        Version::Request,
+        None,
+        None,
+        Opcode::Query,
+        actual.len() as u32,
+        actual,
+    );
 
     assert_eq!(frame.version, Version::Request);
     assert_eq!(frame.flags, Flags::None);
@@ -23,7 +30,14 @@ fn new_should_create_frame() {
 fn encode_should_return_bytes() {
     let body = vec![0u8; 1];
 
-    let frame = Frame::new(Version::Request, Some(Flags::CustomPayload), Some(1234), Opcode::Query, body.len() as u32, body);
+    let frame = Frame::new(
+        Version::Request,
+        Some(Flags::CustomPayload),
+        Some(1234),
+        Opcode::Query,
+        body.len() as u32,
+        body,
+    );
     let encoded_frame_result = frame.encode();
 
     assert_eq!(encoded_frame_result.is_ok(), true);
@@ -31,9 +45,20 @@ fn encode_should_return_bytes() {
     let encoded_frame = encoded_frame_result.unwrap();
     assert_eq!(encoded_frame[0], 0x04);
     assert_eq!(encoded_frame[1], 0x04);
-    assert_eq!(i16::from_be_bytes([encoded_frame[2], encoded_frame[3]]), 1234);
+    assert_eq!(
+        i16::from_be_bytes([encoded_frame[2], encoded_frame[3]]),
+        1234
+    );
     assert_eq!(encoded_frame[4], 0x07);
-    assert_eq!(u32::from_be_bytes([encoded_frame[5], encoded_frame[6], encoded_frame[7], encoded_frame[8]]), 1);
+    assert_eq!(
+        u32::from_be_bytes([
+            encoded_frame[5],
+            encoded_frame[6],
+            encoded_frame[7],
+            encoded_frame[8]
+        ]),
+        1
+    );
     assert_eq!(encoded_frame[9..10], vec![0u8; 1]);
 }
 
@@ -41,7 +66,14 @@ fn encode_should_return_bytes() {
 fn decode_should_return_bytes() {
     let body = "test data".as_bytes().to_vec();
     let expected_body = body.clone();
-    let frame = Frame::new(Version::Request, Some(Flags::CustomPayload), Some(1234), Opcode::Query, body.len() as u32, body);
+    let frame = Frame::new(
+        Version::Request,
+        Some(Flags::CustomPayload),
+        Some(1234),
+        Opcode::Query,
+        body.len() as u32,
+        body,
+    );
     let encoded_frame_result = frame.clone().encode();
 
     assert_eq!(encoded_frame_result.is_ok(), true);

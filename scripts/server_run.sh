@@ -23,10 +23,4 @@ done
 
 echo ""
 echo "Waiting for servers to be ready..."
-sleep 2
-
-NODES=$(IFS=,; echo "${PORTS[*]/#/localhost:}")
-echo "Starting client (interactive)... with nodes: $NODES"
-cargo run --bin client -- --nodes="$NODES"
-
-cleanup
+wait

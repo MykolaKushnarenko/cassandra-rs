@@ -1,4 +1,4 @@
-//! Frame management for the protocol 
+//! Frame management for the protocol
 //!
 //! This represents a frame in the protocol, which is used to read and write data to and from
 
@@ -12,18 +12,32 @@ pub struct Frame {
     pub stream: u16,
     pub opcode: Opcode,
     pub length: u32,
-    pub body: Vec<u8>
+    pub body: Vec<u8>,
 }
 
 impl Frame {
     /// Creates a new frame with the given parameters.
-    /// 
+    ///
     /// Flags and stream are optional, defaulting to None and 0 respectively.
-    pub fn new(version: Version, flags: Option<Flags>, stream: Option<u16>, opcode: Opcode, length: u32, body: Vec<u8>) -> Self {
+    pub fn new(
+        version: Version,
+        flags: Option<Flags>,
+        stream: Option<u16>,
+        opcode: Opcode,
+        length: u32,
+        body: Vec<u8>,
+    ) -> Self {
         let flags = flags.unwrap_or(Flags::None);
         let stream = stream.unwrap_or(0);
 
-        Self { version, flags, stream, opcode, length, body }
+        Self {
+            version,
+            flags,
+            stream,
+            opcode,
+            length,
+            body,
+        }
     }
 
     /// Encodes the frame into a vector of bytes.

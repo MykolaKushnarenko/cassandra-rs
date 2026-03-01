@@ -1,10 +1,11 @@
-mod consistent_hash;
-use crate::consistent_hash::{Cluster, ConsistentHashRing};
+mod client;
+
+use shared::connection::Connection;
+use shared::consistent_hash_ring::{ConsistentHashRing, Node};
+use shared::protocol::types::Request;
 use std::io::Write;
 use std::net::TcpStream;
 use text_colorizer::*;
-use shared::connection::Connection;
-use shared::protocol::types::Request;
 
 const NODES_ARG_KEY: &str = "--nodes=";
 
@@ -13,38 +14,58 @@ const LOG_ERROR: &str = "ERROR";
 const LOG_VERBOSE: &str = "VERBOSE";
 
 fn main() {
-    let cluster = initialize_cluster_config();
-    let hasher = ConsistentHashRing::new(&cluster);
-
-    println!("Nodes: {:?}", cluster);
+    let nodes = initialize_cluster_config();
+    let hasher = ConsistentHashRing::new(nodes);
 
     start_processing(hasher);
     println!("Connected");
 }
 
-fn initialize_cluster_config() -> Cluster {
+fn initialize_cluster_config() -> Vec<Node> {
     let nodes = std::env::args()
         .find(|arg| arg.starts_with(NODES_ARG_KEY))
         .expect("--nodes argument is required")
         .trim_start_matches(NODES_ARG_KEY)
         .split(",")
-        .map(|s| s.to_string())
-        .collect::<Vec<String>>();
+        .map(|s| Node {
+            address: s.to_string(),
+        })
+        .collect::<Vec<Node>>();
 
-    Cluster { nodes }
+    println!("Nodes: {:?}", nodes);
+
+    nodes
 }
 
 fn start_processing(mut hasher: ConsistentHashRing) {
     loop {
-        println!("{}: {}", LOG_INFO.bright_green(), "Supported command: Add, Check (Enter command)".green().bold());
-        print!("{}: {}", LOG_INFO.bright_green(), "Enter command -> ".green().bold());
+        println!(
+            "{}: {}",
+            LOG_INFO.bright_green(),
+            "Supported command: Add, Check (Enter command)"
+                .green()
+                .bold()
+        );
+        print!(
+            "{}: {}",
+            LOG_INFO.bright_green(),
+            "Enter command -> ".green().bold()
+        );
         std::io::stdout().flush().unwrap();
 
         let mut command_input = String::new();
         std::io::stdin().read_line(&mut command_input).unwrap();
 
-        println!("{}: {}", LOG_INFO.bright_green(), "Enter values (e.g. '123')".blue().bold());
-        print!("{}: {}", LOG_INFO.bright_green(), "Enter value -> ".green().bold());
+        println!(
+            "{}: {}",
+            LOG_INFO.bright_green(),
+            "Enter values (e.g. '123')".blue().bold()
+        );
+        print!(
+            "{}: {}",
+            LOG_INFO.bright_green(),
+            "Enter value -> ".green().bold()
+        );
         std::io::stdout().flush().unwrap();
 
         let mut value = String::new();
@@ -65,7 +86,13 @@ fn send(operation: &str, value: &str, hasher: &mut ConsistentHashRing) {
             request = Request::Check(value.to_string());
         }
         _ => {
-            eprintln!("{}: {}", LOG_ERROR.bright_red(), format!("Operation {} is not supported", operation).red().bold());
+            eprintln!(
+                "{}: {}",
+                LOG_ERROR.bright_red(),
+                format!("Operation {} is not supported", operation)
+                    .red()
+                    .bold()
+            );
             return;
         }
     }
@@ -77,7 +104,13 @@ fn send(operation: &str, value: &str, hasher: &mut ConsistentHashRing) {
     match stream_result {
         Ok(value) => stream = value,
         Err(_) => {
-            eprintln!("{}: {}", LOG_ERROR.bright_red(), format!("Cannot connect to server {}", node_address).red().bold());
+            eprintln!(
+                "{}: {}",
+                LOG_ERROR.bright_red(),
+                format!("Cannot connect to server {}", node_address)
+                    .red()
+                    .bold()
+            );
             return;
         }
     }
@@ -88,9 +121,15 @@ fn send(operation: &str, value: &str, hasher: &mut ConsistentHashRing) {
 
     let response;
     match response_result {
-        Ok(value) => { response = value},
+        Ok(value) => response = value,
         Err(e) => {
-            eprintln!("{}: {}", LOG_ERROR.bright_red(), format!("Error occurred while processing message: {:?}", e).red().bold());
+            eprintln!(
+                "{}: {}",
+                LOG_ERROR.bright_red(),
+                format!("Error occurred while processing message: {:?}", e)
+                    .red()
+                    .bold()
+            );
             return;
         }
     }

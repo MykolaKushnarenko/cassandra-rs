@@ -1,4 +1,4 @@
-pub mod consistent_hash;
-pub mod protocol;
-pub mod error;
 pub mod connection;
+pub mod consistent_hash_ring;
+pub mod error;
+pub mod protocol;

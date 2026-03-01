@@ -20,6 +20,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cluster_rebalancer"
+version = "0.1.0"
+dependencies = [
+ "shared",
+ "text-colorizer",
+]
+
+[[package]]
 name = "colored"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

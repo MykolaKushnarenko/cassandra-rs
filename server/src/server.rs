@@ -4,7 +4,10 @@
 //! dispatches messages to appropriate handlers, and maintains global storage.
 
 use crate::handlers::Handler;
-use crate::storage::HashMapStorage;
+use crate::handlers::add_batch_handler::AddBatchHandler;
+use crate::handlers::drop_batch_handler::DropBatch;
+use crate::handlers::get_batch_handler::GetBatchHandler;
+use crate::storage::BTreeStorage;
 use crate::{handlers, storage};
 use add_handler::AddHandler;
 use check_handler::CheckHandler;
@@ -25,17 +28,15 @@ const LOCALHOST: &str = "localhost";
 ///
 /// It holds the shared storage and provides methods to start the server and process connections.
 pub(crate) struct Server {
-    storage: GlobalStorage<String>
+    storage: GlobalStorage<String>,
 }
 
 impl Server {
     /// Creates a new `Server` instance with empty storage.
     pub(crate) fn new() -> Self {
-        let storage = GlobalStorage::new(Mutex::new(HashMapStorage::new()));
+        let storage = GlobalStorage::new(Mutex::new(BTreeStorage::new()));
 
-        Self {
-            storage
-        }
+        Self { storage }
     }
 
     /// Starts the server.
@@ -61,7 +62,7 @@ impl Server {
             let incoming_result = listener.accept();
 
             match incoming_result {
-                Ok(_) => { },
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("Error: {}", e);
                     continue;
@@ -78,9 +79,10 @@ impl Server {
                 let result = Self::handle_connection(stream, storage);
 
                 match result {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
-                        eprintln!("Error occurred while processing message: {:?}", e);}
+                        eprintln!("Error occurred while processing message: {:?}", e);
+                    }
                 }
 
                 println!("Connection aborted for: {}", client_address);
@@ -90,10 +92,10 @@ impl Server {
 
     /// Parses the port number from a command line argument string.
     fn parse_port(arg: &String) -> i32 {
-            let port_string = arg.split("=").nth(1);
-            port_string.unwrap().parse::<i32>().unwrap()
+        let port_string = arg.split("=").nth(1);
+        port_string.unwrap().parse::<i32>().unwrap()
     }
-    
+
     /// Retrieves the port number from command line arguments, defaulting to 4000 if not specified.
     fn get_port(args: Vec<String>) -> i32 {
         args.iter()
@@ -109,10 +111,16 @@ impl Server {
         let mut connection = Connection::new(&stream);
         let add_handler = AddHandler::new(storage.clone());
         let check_handler = CheckHandler::new(storage.clone());
+        let get_batch_handler = GetBatchHandler::new(storage.clone());
+        let drop_batch_handler = DropBatch::new(storage.clone());
+        let add_batch_handler = AddBatchHandler::new(storage.clone());
 
-        let mut handlers: HashMap<String, Box<dyn Handler<String>>> = HashMap::new();
+        let mut handlers: HashMap<String, Box<dyn Handler>> = HashMap::new();
         handlers.insert("add".to_string(), Box::new(add_handler));
         handlers.insert("check".to_string(), Box::new(check_handler));
+        handlers.insert("drop_batch".to_string(), Box::new(drop_batch_handler));
+        handlers.insert("get_batch".to_string(), Box::new(get_batch_handler));
+        handlers.insert("add_batch".to_string(), Box::new(add_batch_handler));
 
         loop {
             Self::process_message(&mut connection, &mut handlers)?;
@@ -120,23 +128,38 @@ impl Server {
     }
 
     /// Receives, processes, and responds to a single message from a connection.
-    fn process_message(connection: &mut Connection, handlers:&mut HashMap<String, Box<dyn Handler<String>>>) -> AppResult<()> {
+    fn process_message(
+        connection: &mut Connection,
+        handlers: &mut HashMap<String, Box<dyn Handler>>,
+    ) -> AppResult<()> {
         let request = connection.receive_request()?;
 
         let response;
         match request {
-            Request::Add(value) => {
+            Request::Add(_) => {
                 let add_handler = handlers.get_mut("add").unwrap();
-                response = add_handler.handle(value)?;
+                response = add_handler.handle(request)?;
             }
-            Request::Check(value) => {
+            Request::Check(_) => {
                 let check_handler = handlers.get_mut("check").unwrap();
-                response = check_handler.handle(value)?;
+                response = check_handler.handle(request)?;
+            }
+            Request::GetBatch(_) => {
+                let get_range_handler = handlers.get_mut("get_batch").unwrap();
+                response = get_range_handler.handle(request)?;
+            }
+            Request::DropBatch(_) => {
+                let drop_range_handler = handlers.get_mut("drop_batch").unwrap();
+                response = drop_range_handler.handle(request)?;
+            }
+            Request::AddBatch(_) => {
+                let add_range_handler = handlers.get_mut("add_batch").unwrap();
+                response = add_range_handler.handle(request)?
             }
         }
 
         connection.send_response(response)?;
-        
+
         Ok(())
     }
 }

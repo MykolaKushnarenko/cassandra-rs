@@ -1,25 +1,34 @@
 //! Handler for the "check" command.
 
-use shared::error::AppResult;
-use shared::protocol::types::Response;
 use crate::handlers::Handler;
 use crate::storage::{GlobalStorage, Storage};
+use shared::error::AppResult;
+use shared::protocol::types::{Request, Response};
 
 /// A handler that checks if a value exists in the global storage.
 pub struct CheckHandler<T> {
-    storage: GlobalStorage<T>
+    storage: GlobalStorage<T>,
 }
 
-impl Handler<String> for CheckHandler<String> {
-    fn handle(&mut self, value: String) -> AppResult<Response> {
+impl Handler for CheckHandler<String> {
+    fn handle(&mut self, request: Request) -> AppResult<Response> {
         let storage = self.storage.lock().unwrap();
-        
-        let result = storage.check(&value);
-        if result {
-            return Ok(Response::Bool(true));
+
+        if matches!(request, Request::Check(_)) {
+            if let Request::Check(value_ti_check) = request {
+                let result = storage.check(&value_ti_check);
+                if result {
+                    return Ok(Response::Bool(true));
+                }
+
+                return Ok(Response::String(format!(
+                    "Value: {} doesn't exist",
+                    value_ti_check
+                )));
+            }
         }
 
-        Ok(Response::String(format!("Value: {} doesn't exist", value)))
+        Ok(Response::String("Wrong handler!".to_string()))
     }
 }
 

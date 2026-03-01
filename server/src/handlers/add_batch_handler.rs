@@ -1,27 +1,28 @@
-//! Handler for the "add" command.
+//! Handler for the "add batch" command.
 
 use crate::handlers::Handler;
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
 
-/// A handler that adds a value to the global storage.
-pub(crate) struct AddHandler<T> {
+/// A handler that adds a batch of values to the global storage.
+pub(crate) struct AddBatchHandler<T> {
     storage: GlobalStorage<T>,
 }
 
-impl Handler for AddHandler<String> {
+impl Handler for AddBatchHandler<String> {
     fn handle(&mut self, request: Request) -> AppResult<Response> {
         let mut storage = self.storage.lock().unwrap();
 
-        if matches!(request, Request::Add(_)) {
-            if let Request::Add(value) = request {
-                storage.add(value.clone());
+        if matches!(request, Request::AddBatch(_)) {
+            if let Request::AddBatch(items) = request {
+                for item in items.iter() {
+                    storage.add(item.clone());
+                }
 
                 return Ok(Response::String(format!(
-                    "Added {}, there are currently {}",
-                    value,
-                    storage.get_count()
+                    "Inserted batch of {}",
+                    items.len()
                 )));
             }
             return Ok(Response::String("Wrong handler!".to_string()));
@@ -31,8 +32,8 @@ impl Handler for AddHandler<String> {
     }
 }
 
-impl<T> AddHandler<T> {
-    /// Creates a new `AddHandler` with the given global storage.
+impl<T> AddBatchHandler<T> {
+    /// Creates a new `AddBatchHandler` with the given global storage.
     pub fn new(storage: GlobalStorage<T>) -> Self {
         Self { storage }
     }
