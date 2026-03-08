@@ -5,11 +5,12 @@
 use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
 
-pub(crate) mod add_handler;
 pub(crate) mod add_batch_handler;
+pub(crate) mod add_handler;
 pub(crate) mod check_handler;
 pub(crate) mod drop_batch_handler;
 pub(crate) mod get_batch_handler;
+pub(crate) mod get_count;
 
 /// A trait for handling specific commands.
 pub trait Handler {

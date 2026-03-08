@@ -7,7 +7,8 @@ use crate::handlers::Handler;
 use crate::handlers::add_batch_handler::AddBatchHandler;
 use crate::handlers::drop_batch_handler::DropBatch;
 use crate::handlers::get_batch_handler::GetBatchHandler;
-use crate::storage::BTreeStorage;
+use crate::handlers::get_count::GetCountHandler;
+use crate::storage::{BTreeStorage, Storage};
 use crate::{handlers, storage};
 use add_handler::AddHandler;
 use check_handler::CheckHandler;
@@ -28,7 +29,7 @@ const LOCALHOST: &str = "localhost";
 ///
 /// It holds the shared storage and provides methods to start the server and process connections.
 pub(crate) struct Server {
-    storage: GlobalStorage<String>,
+    storage: GlobalStorage,
 }
 
 impl Server {
@@ -107,13 +108,14 @@ impl Server {
     /// Handles an individual TCP connection.
     ///
     /// It initializes handlers and enters a loop to process messages from the client.
-    fn handle_connection(stream: TcpStream, storage: GlobalStorage<String>) -> AppResult<()> {
-        let mut connection = Connection::new(&stream);
+    fn handle_connection(stream: TcpStream, storage: GlobalStorage) -> AppResult<()> {
+        let mut connection = Connection::new(stream);
         let add_handler = AddHandler::new(storage.clone());
         let check_handler = CheckHandler::new(storage.clone());
         let get_batch_handler = GetBatchHandler::new(storage.clone());
         let drop_batch_handler = DropBatch::new(storage.clone());
         let add_batch_handler = AddBatchHandler::new(storage.clone());
+        let count_handler = GetCountHandler::new(storage.clone());
 
         let mut handlers: HashMap<String, Box<dyn Handler>> = HashMap::new();
         handlers.insert("add".to_string(), Box::new(add_handler));
@@ -121,6 +123,7 @@ impl Server {
         handlers.insert("drop_batch".to_string(), Box::new(drop_batch_handler));
         handlers.insert("get_batch".to_string(), Box::new(get_batch_handler));
         handlers.insert("add_batch".to_string(), Box::new(add_batch_handler));
+        handlers.insert("get_count".to_string(), Box::new(count_handler));
 
         loop {
             Self::process_message(&mut connection, &mut handlers)?;
@@ -156,9 +159,13 @@ impl Server {
                 let add_range_handler = handlers.get_mut("add_batch").unwrap();
                 response = add_range_handler.handle(request)?
             }
+            Request::Count => {
+                let count_handler = handlers.get_mut("get_count").unwrap();
+                response = count_handler.handle(request)?;
+            }
         }
 
-        connection.send_response(response)?;
+        connection.send_response(&response)?;
 
         Ok(())
     }

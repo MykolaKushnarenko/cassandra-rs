@@ -1,10 +1,9 @@
 mod client;
 
-use shared::connection::Connection;
-use shared::consistent_hash_ring::{ConsistentHashRing, Node};
+use crate::client::{Client, Settings};
+use shared::consistent_hash_ring::Node;
 use shared::protocol::types::Request;
 use std::io::Write;
-use std::net::TcpStream;
 use text_colorizer::*;
 
 const NODES_ARG_KEY: &str = "--nodes=";
@@ -15,9 +14,10 @@ const LOG_VERBOSE: &str = "VERBOSE";
 
 fn main() {
     let nodes = initialize_cluster_config();
-    let hasher = ConsistentHashRing::new(nodes);
+    let settings = Settings::new(nodes);
+    let mut client = Client::new(settings);
 
-    start_processing(hasher);
+    start_processing(&mut client);
     println!("Connected");
 }
 
@@ -37,7 +37,7 @@ fn initialize_cluster_config() -> Vec<Node> {
     nodes
 }
 
-fn start_processing(mut hasher: ConsistentHashRing) {
+fn start_processing(client: &mut Client) {
     loop {
         println!(
             "{}: {}",
@@ -70,13 +70,11 @@ fn start_processing(mut hasher: ConsistentHashRing) {
 
         let mut value = String::new();
         std::io::stdin().read_line(&mut value).unwrap();
-        send(command_input.trim(), value.trim(), &mut hasher);
+        send(client, command_input.trim(), value.trim());
     }
 }
 
-fn send(operation: &str, value: &str, hasher: &mut ConsistentHashRing) {
-    let node_address = hasher.get_node_address(value);
-
+fn send(client: &mut Client, operation: &str, value: &str) {
     let request;
     match operation {
         "add" => {
@@ -97,27 +95,7 @@ fn send(operation: &str, value: &str, hasher: &mut ConsistentHashRing) {
         }
     }
 
-    println!("{}: Sending {} to {}", LOG_VERBOSE, operation, node_address);
-    let stream_result = TcpStream::connect(node_address);
-
-    let stream;
-    match stream_result {
-        Ok(value) => stream = value,
-        Err(_) => {
-            eprintln!(
-                "{}: {}",
-                LOG_ERROR.bright_red(),
-                format!("Cannot connect to server {}", node_address)
-                    .red()
-                    .bold()
-            );
-            return;
-        }
-    }
-
-    let mut connection = Connection::new(&stream);
-
-    let response_result = connection.send_request_with_response(request);
+    let response_result = client.send(request);
 
     let response;
     match response_result {

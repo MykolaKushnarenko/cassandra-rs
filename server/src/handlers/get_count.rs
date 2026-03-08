@@ -6,25 +6,18 @@ use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
 
 /// A handler that gets a batch of values by the provided range of keys.
-pub(crate) struct GetBatchHandler {
+pub(crate) struct GetCountHandler {
     storage: GlobalStorage,
 }
 
-impl Handler for GetBatchHandler {
+impl Handler for GetCountHandler {
     fn handle(&mut self, request: Request) -> AppResult<Response> {
         let storage = self.storage.lock().unwrap();
 
-        if matches!(request, Request::GetBatch(_)) {
-            if let Request::GetBatch(ranges) = request {
-                let mut values = Vec::new();
-                for range in ranges {
-                    let range_values = storage.get_values(range.start, range.end);
-                    values.extend(range_values);
-                }
-
-                let response_array = values.iter().map(|val| val.as_str().to_string()).collect();
-
-                return Ok(Response::Array(response_array));
+        if matches!(request, Request::Count) {
+            if let Request::Count = request {
+                let count = storage.get_count();
+                return Ok(Response::String(format!("Count: {}", count)));
             }
             return Ok(Response::String("Wrong handler!".to_string()));
         }
@@ -33,8 +26,8 @@ impl Handler for GetBatchHandler {
     }
 }
 
-impl GetBatchHandler {
-    /// Creates a new `GetBatchHandler` with the given global storage.
+impl GetCountHandler {
+    /// Creates a new `GetCountHandler` with the given global storage.
     pub fn new(storage: GlobalStorage) -> Self {
         Self { storage }
     }

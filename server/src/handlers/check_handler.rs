@@ -6,11 +6,11 @@ use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
 
 /// A handler that checks if a value exists in the global storage.
-pub struct CheckHandler<T> {
-    storage: GlobalStorage<T>,
+pub struct CheckHandler {
+    storage: GlobalStorage,
 }
 
-impl Handler for CheckHandler<String> {
+impl Handler for CheckHandler {
     fn handle(&mut self, request: Request) -> AppResult<Response> {
         let storage = self.storage.lock().unwrap();
 
@@ -32,9 +32,9 @@ impl Handler for CheckHandler<String> {
     }
 }
 
-impl<T> CheckHandler<T> {
+impl CheckHandler {
     /// Creates a new `CheckHandler` with the given global storage.
-    pub fn new(storage: GlobalStorage<T>) -> Self {
+    pub fn new(storage: GlobalStorage) -> Self {
         Self { storage }
     }
 }

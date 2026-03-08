@@ -6,11 +6,11 @@ use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
 
 /// A handler that drops value by the provided range of keys.
-pub(crate) struct DropBatch<T> {
-    storage: GlobalStorage<T>,
+pub(crate) struct DropBatch {
+    storage: GlobalStorage,
 }
 
-impl Handler for DropBatch<String> {
+impl Handler for DropBatch {
     fn handle(&mut self, value: Request) -> AppResult<Response> {
         let mut storage = self.storage.lock().unwrap();
 
@@ -40,9 +40,9 @@ impl Handler for DropBatch<String> {
     }
 }
 
-impl<T> DropBatch<T> {
+impl DropBatch {
     /// Creates a new `DropBatch` with the given global storage.
-    pub fn new(storage: GlobalStorage<T>) -> Self {
+    pub fn new(storage: GlobalStorage) -> Self {
         Self { storage }
     }
 }

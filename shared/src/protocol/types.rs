@@ -90,12 +90,13 @@ impl From<u8> for Flags {
 pub enum Request {
     Add(String),
     Check(String),
+    Count,
     GetBatch(Vec<Range>),
     DropBatch(Vec<Range>),
     AddBatch(Vec<String>),
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum Response {
     String(String),
     Array(Vec<String>),

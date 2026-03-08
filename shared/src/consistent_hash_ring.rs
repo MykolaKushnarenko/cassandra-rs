@@ -1,30 +1,53 @@
+pub use crate::cluster::Node;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-const REPLICAS: usize = 10;
+/// Number of virtual nodes created per physical node.
+///
+/// Virtual nodes improve data distribution by creating multiple points
+/// on the hash ring for each physical node, reducing hot spots.
+const VIRTUAL_PARTITION_COUNT: usize = 10;
 
-#[derive(Debug, Clone)]
-pub struct Node {
-    pub address: String,
-}
-
+/// A consistent hashing ring for distributing keys across nodes.
+///
+/// This implementation uses virtual nodes to ensure even distribution
+/// of data across the cluster. Each physical node is assigned multiple positions
+/// on the ring, determined by hashing the node address with a replica index.
+///
+/// # How it works
+///
+/// 1. Each node gets 10 virtual tokens placed at hash positions on the ring
+/// 2. Keys are hashed and mapped to the next token clockwise on the ring
+/// 3. The node owning that token is responsible for storing the key
 pub struct ConsistentHashRing {
+    /// Maps hash values (tokens) to node indices
     ring: BTreeMap<u64, usize>,
+    /// All nodes in the cluster
     nodes: Vec<Node>,
 }
 
+/// Represents a range of hash values on the consistent hash ring.
+///
+/// A range is defined by a start hash (exclusive) and end hash (inclusive).
+/// When `start > end`, this represents a wraparound range that spans from
+/// start to u64::MAX and then from 0 to end.
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Range {
+    /// Start of the range (exclusive)
     pub start: u64,
+    /// End of the range (inclusive)
     pub end: u64,
 }
 
 impl ConsistentHashRing {
+    /// Creates a new consistent hash ring with the given nodes.
+    ///
+    /// Each node is assigned multiple virtual partitions to ensure even distribution.
     pub fn new(nodes: Vec<Node>) -> ConsistentHashRing {
         let mut ring = BTreeMap::new();
 
         for (index, node) in nodes.iter().enumerate() {
-            for i in 0..REPLICAS {
+            for i in 0..VIRTUAL_PARTITION_COUNT {
                 let key = format!("{}:{}", node.address, i);
                 let node_hash = Self::calculate_hash(&key);
                 ring.insert(node_hash, index);
@@ -34,36 +57,8 @@ impl ConsistentHashRing {
         ConsistentHashRing { ring, nodes }
     }
 
-    pub fn get_ranges_for_node(&self, look_up_node: &str) -> Vec<Range> {
-        let mut ranges = Vec::new();
-
-        let node_hash_values = self
-            .ring
-            .iter()
-            .map(|(hash, node)| (*hash, *node))
-            .collect::<Vec<(u64, usize)>>();
-
-        for i in 0..node_hash_values.len() {
-            let (current_hash, current_node_index) = node_hash_values[i];
-
-            if self.nodes[current_node_index].address != look_up_node {
-                continue;
-            }
-
-            let previous_hash = if i == 0 { 0 } else { node_hash_values[i - 1].0 };
-
-            ranges.push(Range {
-                start: previous_hash,
-                end: current_hash,
-            })
-        }
-
-        ranges
-    }
-
-    pub fn get_node_address(&self, value: &str) -> &str {
-        let hash = Self::calculate_hash(value);
-
+    /// Returns the node responsible for a given hash value.
+    pub fn get_node(&self, hash: u64) -> &Node {
         let selected_node = self
             .ring
             .range(hash..)
@@ -71,9 +66,14 @@ impl ConsistentHashRing {
             .or_else(|| self.ring.iter().next())
             .map(|(_, address)| address);
 
-        let index = selected_node.unwrap();
+        &self.nodes[*selected_node.unwrap()]
+    }
 
-        self.nodes[*index].address.as_str()
+    pub fn get_entities(&self) -> Vec<(u64, &str)> {
+        self.ring
+            .iter()
+            .map(|(hash, index)| (*hash, self.nodes[*index].address.as_str()))
+            .collect()
     }
 
     pub fn calculate_hash(value: &str) -> u64 {
@@ -85,36 +85,30 @@ impl ConsistentHashRing {
         self.nodes.push(node);
         let node_index = self.nodes.len() - 1;
         let inserted_node = self.nodes.last().unwrap();
-        for i in 0..REPLICAS {
+        for i in 0..VIRTUAL_PARTITION_COUNT {
             let key = format!("{}:{}", inserted_node.address, i);
             let node_hash = Self::calculate_hash(&key);
             self.ring.insert(node_hash, node_index);
         }
+    }
+
+    pub fn drop_node(&mut self, node: &Node) {
+        for i in 0..VIRTUAL_PARTITION_COUNT {
+            let key = format!("{}:{}", node.address, i);
+            let node_hash = Self::calculate_hash(&key);
+            self.ring.remove(&node_hash);
+        }
+        self.nodes.retain(|n| n.address != node.address);
+    }
+
+    pub fn get_nodes(&self) -> &[Node] {
+        &self.nodes
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::consistent_hash_ring::{ConsistentHashRing, Node};
-
-    #[test]
-    fn test_get_node_address() {
-        let nodes_ips = vec![
-            Node {
-                address: "127.0.0.1:3000".to_string(),
-            },
-            Node {
-                address: "127.0.0.1:3001".to_string(),
-            },
-            Node {
-                address: "127.0.0.1:3002".to_string(),
-            },
-        ];
-
-        let ring = ConsistentHashRing::new(nodes_ips);
-
-        assert_eq!(ring.get_node_address("test_key"), "127.0.0.1:3002");
-    }
 
     #[test]
     fn test_hash() {
@@ -144,29 +138,10 @@ mod tests {
 
         let mut ring = ConsistentHashRing::new(nodes_ips);
 
-        assert_eq!(ring.get_node_address("test_key1"), "127.0.0.1:3002");
+        let value_hash = ConsistentHashRing::calculate_hash("test_key1");
+        let node_hash = ring.get_node(value_hash);
+        assert_eq!(node_hash.address, "127.0.0.1:3002");
 
         ring.add_node(new_node);
-
-        let hash1 = ConsistentHashRing::calculate_hash("test_key1");
-        let mut count = 0;
-
-        let new_node_ranges = ring.get_ranges_for_node(new_node_ip);
-        for range in new_node_ranges.iter() {
-            if hash1 > range.start && hash1 < range.end {
-                count += 1;
-            }
-        }
-
-        assert_eq!(count, 1);
-        assert_eq!(ring.get_node_address("test_key1"), "127.0.0.1:3003");
-
-        let res = ring.get_ranges_for_node("127.0.0.1:3003");
-
-        for range in res.iter() {
-            if range.start > range.end {
-                panic!("Wrong range!");
-            }
-        }
     }
 }

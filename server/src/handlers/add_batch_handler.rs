@@ -6,11 +6,11 @@ use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
 
 /// A handler that adds a batch of values to the global storage.
-pub(crate) struct AddBatchHandler<T> {
-    storage: GlobalStorage<T>,
+pub(crate) struct AddBatchHandler {
+    storage: GlobalStorage,
 }
 
-impl Handler for AddBatchHandler<String> {
+impl Handler for AddBatchHandler {
     fn handle(&mut self, request: Request) -> AppResult<Response> {
         let mut storage = self.storage.lock().unwrap();
 
@@ -32,9 +32,9 @@ impl Handler for AddBatchHandler<String> {
     }
 }
 
-impl<T> AddBatchHandler<T> {
+impl AddBatchHandler {
     /// Creates a new `AddBatchHandler` with the given global storage.
-    pub fn new(storage: GlobalStorage<T>) -> Self {
+    pub fn new(storage: GlobalStorage) -> Self {
         Self { storage }
     }
 }
