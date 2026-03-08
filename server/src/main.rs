@@ -1,5 +1,6 @@
 //! Entry point for the server application.
 
+mod handler_manager;
 mod handlers;
 mod server;
 mod storage;

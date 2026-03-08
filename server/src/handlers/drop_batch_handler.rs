@@ -1,6 +1,5 @@
 //! Handler for the "drop batch" command.
 
-use crate::handlers::Handler;
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
@@ -10,8 +9,8 @@ pub(crate) struct DropBatch {
     storage: GlobalStorage,
 }
 
-impl Handler for DropBatch {
-    fn handle(&mut self, value: Request) -> AppResult<Response> {
+impl DropBatch {
+    pub(crate) fn handle(&mut self, value: &Request) -> AppResult<Response> {
         let mut storage = self.storage.lock().unwrap();
 
         if matches!(value, Request::DropBatch(_)) {

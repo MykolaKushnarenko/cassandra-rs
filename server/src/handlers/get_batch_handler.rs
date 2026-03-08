@@ -1,6 +1,5 @@
 //! Handler for the "get bach" command.
 
-use crate::handlers::Handler;
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
@@ -10,8 +9,8 @@ pub(crate) struct GetBatchHandler {
     storage: GlobalStorage,
 }
 
-impl Handler for GetBatchHandler {
-    fn handle(&mut self, request: Request) -> AppResult<Response> {
+impl GetBatchHandler {
+    pub(crate) fn handle(&mut self, request: &Request) -> AppResult<Response> {
         let storage = self.storage.lock().unwrap();
 
         if matches!(request, Request::GetBatch(_)) {

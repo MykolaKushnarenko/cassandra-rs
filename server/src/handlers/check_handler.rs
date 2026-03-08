@@ -1,6 +1,5 @@
 //! Handler for the "check" command.
 
-use crate::handlers::Handler;
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
@@ -10,8 +9,8 @@ pub struct CheckHandler {
     storage: GlobalStorage,
 }
 
-impl Handler for CheckHandler {
-    fn handle(&mut self, request: Request) -> AppResult<Response> {
+impl CheckHandler {
+    pub(crate) fn handle(&mut self, request: &Request) -> AppResult<Response> {
         let storage = self.storage.lock().unwrap();
 
         if matches!(request, Request::Check(_)) {
