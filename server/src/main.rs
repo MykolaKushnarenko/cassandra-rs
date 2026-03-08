@@ -1,8 +1,8 @@
 //! Entry point for the server application.
 
+mod handlers;
 mod server;
 mod storage;
-mod handlers;
 
 use server::Server;
 

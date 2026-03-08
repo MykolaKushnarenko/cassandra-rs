@@ -1,9 +1,9 @@
 #![cfg(test)]
 
-use std::io::Cursor;
 use shared::protocol::frame::Frame;
+use shared::protocol::protocol_writer::ProtocolWriter;
 use shared::protocol::types::*;
-use shared::protocol::protocol_writer::{ProtocolWriter};
+use std::io::Cursor;
 
 #[test]
 fn test_send_request() {

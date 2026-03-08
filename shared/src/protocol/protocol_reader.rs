@@ -1,10 +1,10 @@
 //! Wrapper over TCP stream for reading and decoding protocol frames
 
+use crate::protocol::frame::Frame;
+use crate::protocol::types::{Request, Response};
 use io::Read;
 use std::io;
 use std::io::BufReader;
-use crate::protocol::frame::{Frame};
-use crate::protocol::types::{Request, Response};
 
 pub struct ProtocolReader<T: Read> {
     reader: BufReader<T>,

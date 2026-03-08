@@ -1,7 +1,5 @@
 //! Error types for the application.
 
-#![allow(unused)]
-
 /// Error variants that can occur during application execution.
 #[derive(Debug)]
 pub enum Error {
@@ -12,7 +10,7 @@ pub enum Error {
     /// An I/O error occurred during connection handling.
     ConnectionError(Option<std::io::Error>),
     /// The received command is not recognized.
-    UnknownCommand(String)
+    UnknownCommand(String),
 }
 
 /// A specialized Result type for application operations.
