@@ -1,6 +1,5 @@
 //! Handler for the "add" command.
 
-use crate::handlers::Handler;
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
 use shared::protocol::types::{Request, Response};
@@ -10,8 +9,8 @@ pub(crate) struct AddHandler {
     storage: GlobalStorage,
 }
 
-impl Handler for AddHandler {
-    fn handle(&mut self, request: Request) -> AppResult<Response> {
+impl AddHandler {
+    pub(crate) fn handle(&mut self, request: &Request) -> AppResult<Response> {
         let mut storage = self.storage.lock().unwrap();
 
         if matches!(request, Request::Add(_)) {

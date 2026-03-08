@@ -42,7 +42,7 @@ impl Rebalancer {
 
         let ranges = Self::get_ranges(entities, node_address.as_str());
         let mut rebalanced_items = Vec::new();
-        
+
         let request = Request::GetBatch(ranges.clone());
         let routing_strategy = self.cluster.route_request(&request);
 
@@ -78,6 +78,7 @@ impl Rebalancer {
             .connection_pool
             .execute(routing_strategy, request, Some(node.address.as_str()))
             .unwrap();
+
         match response {
             Response::Array(value) => {
                 println!(

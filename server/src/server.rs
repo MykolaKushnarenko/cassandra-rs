@@ -3,20 +3,11 @@
 //! This module contains the `Server` struct which manages incoming TCP connections,
 //! dispatches messages to appropriate handlers, and maintains global storage.
 
-use crate::handlers::Handler;
-use crate::handlers::add_batch_handler::AddBatchHandler;
-use crate::handlers::drop_batch_handler::DropBatch;
-use crate::handlers::get_batch_handler::GetBatchHandler;
-use crate::handlers::get_count::GetCountHandler;
+use crate::handler_manager::HandlerManager;
+use crate::storage;
 use crate::storage::{BTreeStorage, Storage};
-use crate::{handlers, storage};
-use add_handler::AddHandler;
-use check_handler::CheckHandler;
-use handlers::{add_handler, check_handler};
 use shared::connection::Connection;
 use shared::error::AppResult;
-use shared::protocol::types::Request;
-use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::thread;
@@ -110,62 +101,23 @@ impl Server {
     /// It initializes handlers and enters a loop to process messages from the client.
     fn handle_connection(stream: TcpStream, storage: GlobalStorage) -> AppResult<()> {
         let mut connection = Connection::new(stream);
-        let add_handler = AddHandler::new(storage.clone());
-        let check_handler = CheckHandler::new(storage.clone());
-        let get_batch_handler = GetBatchHandler::new(storage.clone());
-        let drop_batch_handler = DropBatch::new(storage.clone());
-        let add_batch_handler = AddBatchHandler::new(storage.clone());
-        let count_handler = GetCountHandler::new(storage.clone());
-
-        let mut handlers: HashMap<String, Box<dyn Handler>> = HashMap::new();
-        handlers.insert("add".to_string(), Box::new(add_handler));
-        handlers.insert("check".to_string(), Box::new(check_handler));
-        handlers.insert("drop_batch".to_string(), Box::new(drop_batch_handler));
-        handlers.insert("get_batch".to_string(), Box::new(get_batch_handler));
-        handlers.insert("add_batch".to_string(), Box::new(add_batch_handler));
-        handlers.insert("get_count".to_string(), Box::new(count_handler));
+        let mut handler_manager = HandlerManager::new(storage);
 
         loop {
-            Self::process_message(&mut connection, &mut handlers)?;
+            Self::process_message(&mut connection, &mut handler_manager)?;
         }
     }
 
     /// Receives, processes, and responds to a single message from a connection.
     fn process_message(
         connection: &mut Connection,
-        handlers: &mut HashMap<String, Box<dyn Handler>>,
+        handler_manager: &mut HandlerManager,
     ) -> AppResult<()> {
         let request = connection.receive_request()?;
 
-        let response;
-        match request {
-            Request::Add(_) => {
-                let add_handler = handlers.get_mut("add").unwrap();
-                response = add_handler.handle(request)?;
-            }
-            Request::Check(_) => {
-                let check_handler = handlers.get_mut("check").unwrap();
-                response = check_handler.handle(request)?;
-            }
-            Request::GetBatch(_) => {
-                let get_range_handler = handlers.get_mut("get_batch").unwrap();
-                response = get_range_handler.handle(request)?;
-            }
-            Request::DropBatch(_) => {
-                let drop_range_handler = handlers.get_mut("drop_batch").unwrap();
-                response = drop_range_handler.handle(request)?;
-            }
-            Request::AddBatch(_) => {
-                let add_range_handler = handlers.get_mut("add_batch").unwrap();
-                response = add_range_handler.handle(request)?
-            }
-            Request::Count => {
-                let count_handler = handlers.get_mut("get_count").unwrap();
-                response = count_handler.handle(request)?;
-            }
-        }
+        let handler_result = handler_manager.handle(&request)?;
 
-        connection.send_response(&response)?;
+        connection.send_response(&handler_result)?;
 
         Ok(())
     }

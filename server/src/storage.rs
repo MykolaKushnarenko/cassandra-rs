@@ -23,7 +23,7 @@ pub trait Storage {
     fn get_count(&self) -> usize;
 
     fn remove(&mut self, value: u64) -> bool;
-    
+
     fn get_values(&self, start: u64, end: u64) -> Vec<&Self::ValueType>;
 
     fn get_keys_in_range(&self, start: u64, end: u64) -> Vec<u64>;
