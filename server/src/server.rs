@@ -4,17 +4,24 @@
 //! dispatches messages to appropriate handlers, and maintains global storage.
 
 use crate::handler_manager::HandlerManager;
+use crate::replicator::{ReplicationEntry, Replicator};
 use crate::storage;
 use crate::storage::{BTreeStorage, Storage};
+use log::{info, warn};
+use shared::cluster::{Cluster, Node};
 use shared::connection::Connection;
+use shared::connection_pool::ConnectionPool;
 use shared::error::AppResult;
 use std::net::{TcpListener, TcpStream};
-use std::sync::Mutex;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Mutex, mpsc};
 use std::thread;
 use storage::GlobalStorage;
 
 /// The address of the server.
 const LOCALHOST: &str = "localhost";
+
+const NODES_ARG_KEY: &str = "nodes=";
 
 /// The main server struct.
 ///
@@ -34,29 +41,42 @@ impl Server {
     /// Starts the server.
     ///
     /// It parses the port from command line arguments and begins listening for incoming connections.
-    pub fn start(&self) {
+    pub fn start(&mut self) {
         let port = Self::get_port(std::env::args().collect());
+
+        let nodes = Self::initialize_cluster_config();
+        let cluster = Cluster::new(nodes);
+
+        let (tx, rx): (Sender<ReplicationEntry>, Receiver<ReplicationEntry>) = mpsc::channel();
+
+        let mut replicator = Replicator::new(
+            format!("localhost:{}", port).to_string(),
+            cluster,
+            rx,
+            ConnectionPool::new(),
+        );
+        thread::spawn(move || replicator.run());
 
         let listener_result = TcpListener::bind(format!("{}:{}", LOCALHOST, port));
 
-        println!("Server started on port {}", port);
+        info!("Server started on port {}", port);
         match listener_result {
-            Ok(listener) => self.start_accepting(listener),
+            Ok(listener) => self.start_accepting(listener, tx),
             Err(e) => {
-                eprintln!("Error: {}", e)
+                warn!("Error: {}", e)
             }
         }
     }
 
     /// Continuously accepts incoming TCP connections and spawns a new thread for each.
-    fn start_accepting(&self, listener: TcpListener) {
+    fn start_accepting(&self, listener: TcpListener, sender: Sender<ReplicationEntry>) {
         loop {
             let incoming_result = listener.accept();
 
             match incoming_result {
                 Ok(_) => {}
                 Err(e) => {
-                    eprintln!("Error: {}", e);
+                    warn!("Error: {}", e);
                     continue;
                 }
             }
@@ -65,19 +85,20 @@ impl Server {
 
             let storage = self.storage.clone();
 
+            let sender = sender.clone();
             thread::spawn(move || {
-                println!("Accepted connection from: {}", client_address);
+                info!("Accepted connection from: {}", client_address);
 
-                let result = Self::handle_connection(stream, storage);
+                let result = Self::handle_connection(stream, storage, sender);
 
                 match result {
                     Ok(_) => {}
                     Err(e) => {
-                        eprintln!("Error occurred while processing message: {:?}", e);
+                        warn!("Error occurred while processing message: {:?}", e);
                     }
                 }
 
-                println!("Connection aborted for: {}", client_address);
+                info!("Connection aborted for: {}", client_address);
             });
         }
     }
@@ -99,19 +120,23 @@ impl Server {
     /// Handles an individual TCP connection.
     ///
     /// It initializes handlers and enters a loop to process messages from the client.
-    fn handle_connection(stream: TcpStream, storage: GlobalStorage) -> AppResult<()> {
+    fn handle_connection(
+        stream: TcpStream,
+        storage: GlobalStorage,
+        sender: Sender<ReplicationEntry>,
+    ) -> AppResult<()> {
         let mut connection = Connection::new(stream);
-        let mut handler_manager = HandlerManager::new(storage);
+        let handler_manager = HandlerManager::new(storage, sender);
 
         loop {
-            Self::process_message(&mut connection, &mut handler_manager)?;
+            Self::process_message(&mut connection, &handler_manager)?;
         }
     }
 
     /// Receives, processes, and responds to a single message from a connection.
     fn process_message(
         connection: &mut Connection,
-        handler_manager: &mut HandlerManager,
+        handler_manager: &HandlerManager,
     ) -> AppResult<()> {
         let request = connection.receive_request()?;
 
@@ -120,5 +145,22 @@ impl Server {
         connection.send_response(&handler_result)?;
 
         Ok(())
+    }
+
+    fn initialize_cluster_config() -> Vec<Node> {
+        let nodes = std::env::args()
+            .inspect(|arg| info!("Arg: {}", arg))
+            .find(|arg| arg.starts_with(NODES_ARG_KEY))
+            .expect("--nodes argument is required")
+            .trim_start_matches(NODES_ARG_KEY)
+            .split(",")
+            .map(|s| Node {
+                address: s.to_string(),
+            })
+            .collect::<Vec<Node>>();
+
+        info!("Nodes: {:?}", nodes);
+
+        nodes
     }
 }

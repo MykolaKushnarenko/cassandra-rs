@@ -1,39 +1,30 @@
 //! Handler for the "add batch" command.
 
+use crate::replicator::ReplicationEntry;
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
-use shared::protocol::types::{Request, Response};
+use shared::protocol::types::{Entry, Response};
+use std::sync::mpsc::Sender;
 
-/// A handler that adds a batch of values to the global storage.
-pub(crate) struct AddBatchHandler {
-    storage: GlobalStorage,
-}
+/// Adds a batch of values to the global storage.
+pub(crate) fn handle(
+    items: &[Entry],
+    storage: &GlobalStorage,
+    sender: &Sender<ReplicationEntry>,
+) -> AppResult<Response> {
+    let mut storage_guard = storage.lock().unwrap();
 
-impl AddBatchHandler {
-    pub(crate) fn handle(&mut self, request: &Request) -> AppResult<Response> {
-        let mut storage = self.storage.lock().unwrap();
-
-        if matches!(request, Request::AddBatch(_)) {
-            if let Request::AddBatch(items) = request {
-                for item in items.iter() {
-                    storage.add(item.clone());
-                }
-
-                return Ok(Response::String(format!(
-                    "Inserted batch of {}",
-                    items.len()
-                )));
-            }
-            return Ok(Response::String("Wrong handler!".to_string()));
-        }
-
-        Ok(Response::String("Wrong handler!".to_string()))
+    let items_count = items.len();
+    for item in items.iter() {
+        storage_guard.add(item.value.clone());
     }
-}
 
-impl AddBatchHandler {
-    /// Creates a new `AddBatchHandler` with the given global storage.
-    pub fn new(storage: GlobalStorage) -> Self {
-        Self { storage }
-    }
+    sender
+        .send(ReplicationEntry::Batch(items.to_vec()))
+        .unwrap();
+
+    Ok(Response::String(format!(
+        "Inserted batch of {}",
+        items_count
+    )))
 }

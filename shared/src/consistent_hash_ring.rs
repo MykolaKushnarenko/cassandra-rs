@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 ///
 /// Virtual nodes improve data distribution by creating multiple points
 /// on the hash ring for each physical node, reducing hot spots.
-const VIRTUAL_PARTITION_COUNT: usize = 10;
+const VIRTUAL_PARTITION_COUNT: usize = 256;
 
 /// A consistent hashing ring for distributing keys across nodes.
 ///
@@ -19,9 +19,10 @@ const VIRTUAL_PARTITION_COUNT: usize = 10;
 /// 1. Each node gets 10 virtual tokens placed at hash positions on the ring
 /// 2. Keys are hashed and mapped to the next token clockwise on the ring
 /// 3. The node owning that token is responsible for storing the key
+#[derive(Debug)]
 pub struct ConsistentHashRing {
     /// Maps hash values (tokens) to node indices
-    ring: BTreeMap<u64, usize>,
+    ring: BTreeMap<u64, String>,
     /// All nodes in the cluster
     nodes: Vec<Node>,
 }
@@ -46,15 +47,29 @@ impl ConsistentHashRing {
     pub fn new(nodes: Vec<Node>) -> ConsistentHashRing {
         let mut ring = BTreeMap::new();
 
-        for (index, node) in nodes.iter().enumerate() {
-            for i in 0..VIRTUAL_PARTITION_COUNT {
-                let key = format!("{}:{}", node.address, i);
-                let node_hash = Self::calculate_hash(&key);
-                ring.insert(node_hash, index);
-            }
+        for node in nodes.iter() {
+            Self::insert_virtual_nodes(&mut ring, &node.address);
         }
 
         ConsistentHashRing { ring, nodes }
+    }
+
+    /// Inserts virtual nodes for a given node address into the ring.
+    fn insert_virtual_nodes(ring: &mut BTreeMap<u64, String>, node_address: &str) {
+        for i in 0..VIRTUAL_PARTITION_COUNT {
+            let key = format!("{}:vnode:{}", node_address, i);
+            let hash = Self::calculate_hash_with_seed(&key, i as u32);
+            ring.insert(hash, node_address.to_string());
+        }
+    }
+
+    /// Removes virtual nodes for a given node address from the ring.
+    fn remove_virtual_nodes(ring: &mut BTreeMap<u64, String>, node_address: &str) {
+        for i in 0..VIRTUAL_PARTITION_COUNT {
+            let key = format!("{}:vnode:{}", node_address, i);
+            let hash = Self::calculate_hash_with_seed(&key, i as u32);
+            ring.remove(&hash);
+        }
     }
 
     /// Returns the node responsible for a given hash value.
@@ -64,15 +79,19 @@ impl ConsistentHashRing {
             .range(hash..)
             .next()
             .or_else(|| self.ring.iter().next())
-            .map(|(_, address)| address);
+            .map(|(_, address)| address)
+            .unwrap();
 
-        &self.nodes[*selected_node.unwrap()]
+        self.nodes
+            .iter()
+            .find(|n| &n.address == selected_node)
+            .unwrap()
     }
 
     pub fn get_entities(&self) -> Vec<(u64, &str)> {
         self.ring
             .iter()
-            .map(|(hash, index)| (*hash, self.nodes[*index].address.as_str()))
+            .map(|(hash, node_address)| (*hash, node_address.as_str()))
             .collect()
     }
 
@@ -81,23 +100,19 @@ impl ConsistentHashRing {
         hash as u64
     }
 
+    pub fn calculate_hash_with_seed(value: &str, seed: u32) -> u64 {
+        let hash = murmur3::murmur3_x64_128(&mut std::io::Cursor::new(value), seed).unwrap();
+        hash as u64
+    }
+
     pub fn add_node(&mut self, node: Node) {
+        let node_address = node.address.clone();
+        Self::insert_virtual_nodes(&mut self.ring, &node_address);
         self.nodes.push(node);
-        let node_index = self.nodes.len() - 1;
-        let inserted_node = self.nodes.last().unwrap();
-        for i in 0..VIRTUAL_PARTITION_COUNT {
-            let key = format!("{}:{}", inserted_node.address, i);
-            let node_hash = Self::calculate_hash(&key);
-            self.ring.insert(node_hash, node_index);
-        }
     }
 
     pub fn drop_node(&mut self, node: &Node) {
-        for i in 0..VIRTUAL_PARTITION_COUNT {
-            let key = format!("{}:{}", node.address, i);
-            let node_hash = Self::calculate_hash(&key);
-            self.ring.remove(&node_hash);
-        }
+        Self::remove_virtual_nodes(&mut self.ring, &node.address);
         self.nodes.retain(|n| n.address != node.address);
     }
 
@@ -131,7 +146,6 @@ mod tests {
             },
         ];
 
-        let new_node_ip = "127.0.0.1:3003";
         let new_node = Node {
             address: "127.0.0.1:3003".to_string(),
         };
@@ -141,6 +155,36 @@ mod tests {
         let value_hash = ConsistentHashRing::calculate_hash("test_key1");
         let node_hash = ring.get_node(value_hash);
         assert_eq!(node_hash.address, "127.0.0.1:3002");
+
+        ring.add_node(new_node);
+    }
+
+    #[test]
+    fn test_get_ring_() {
+        let nodes_ips = vec![
+            Node {
+                address: "localhost:3000".to_string(),
+            },
+            Node {
+                address: "localhost:4000".to_string(),
+            },
+            Node {
+                address: "localhost:5001".to_string(),
+            },
+            Node {
+                address: "localhost:6001".to_string(),
+            },
+        ];
+
+        let new_node = Node {
+            address: "localhost:7001".to_string(),
+        };
+
+        let mut ring = ConsistentHashRing::new(nodes_ips);
+
+        let value_hash = ConsistentHashRing::calculate_hash("test_key1");
+        let node_hash = ring.get_node(value_hash);
+        assert_eq!(node_hash.address, "localhost:4000");
 
         ring.add_node(new_node);
     }

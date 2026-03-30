@@ -1,8 +1,9 @@
 use crate::LOG_VERBOSE;
-use shared::cluster::{Cluster, Node, RoutingStrategy};
+use shared::cluster::{Cluster, Node};
 use shared::connection_pool::ConnectionPool;
 use shared::consistent_hash_ring::Range;
-use shared::protocol::types::{Request, Response};
+use shared::protocol::types::{Entry, Request, Response};
+use shared::routing::RoutingStrategy;
 
 pub enum RebalanceAction {
     AddNode,
@@ -44,7 +45,8 @@ impl Rebalancer {
         let mut rebalanced_items = Vec::new();
 
         let request = Request::GetBatch(ranges.clone());
-        let routing_strategy = self.cluster.route_request(&request);
+        let router = self.cluster.router();
+        let routing_strategy = router.route_request(&request);
 
         let result =
             self.connection_pool
@@ -52,7 +54,13 @@ impl Rebalancer {
 
         match result {
             Ok(Response::Array(value)) => {
-                rebalanced_items = value;
+                rebalanced_items = value
+                    .into_iter()
+                    .map(|val| Entry {
+                        value: val,
+                        replication_factor: Some(1),
+                    })
+                    .collect();
             }
             Err(_) => {}
             _ => {}
@@ -73,7 +81,8 @@ impl Rebalancer {
         }
 
         let request = Request::DropBatch(ranges.clone());
-        let routing_strategy = self.cluster.route_request(&request);
+        let router = self.cluster.router();
+        let routing_strategy = router.route_request(&request);
         let response = self
             .connection_pool
             .execute(routing_strategy, request, Some(node.address.as_str()))
@@ -103,7 +112,8 @@ impl Rebalancer {
         );
 
         let count_request = Request::Count;
-        let strategy = self.cluster.route_request(&count_request);
+        let router = self.cluster.router();
+        let strategy = router.route_request(&count_request);
         let _ = self.connection_pool.execute(strategy, count_request, None);
     }
 
@@ -133,8 +143,12 @@ impl Rebalancer {
         }
 
         for item in dropped_items {
-            let request = Request::Add(item);
-            let strategy = self.cluster.route_request(&request);
+            let request = Request::Add(Entry {
+                value: item,
+                replication_factor: None,
+            });
+            let router = self.cluster.router();
+            let strategy = router.route_request(&request);
             let result = self.connection_pool.execute(strategy, request, None);
 
             match result {
@@ -170,7 +184,8 @@ impl Rebalancer {
         );
 
         let count_request = Request::Count;
-        let strategy = self.cluster.route_request(&count_request);
+        let router = self.cluster.router();
+        let strategy = router.route_request(&count_request);
         let _ = self.connection_pool.execute(strategy, count_request, None);
     }
 

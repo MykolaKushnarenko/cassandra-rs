@@ -1,40 +1,21 @@
-//! Handler for the "get bach" command.
+//! Handler for the "get batch" command.
 
 use crate::storage::{GlobalStorage, Storage};
+use shared::consistent_hash_ring::Range;
 use shared::error::AppResult;
-use shared::protocol::types::{Request, Response};
+use shared::protocol::types::Response;
 
-/// A handler that gets a batch of values by the provided range of keys.
-pub(crate) struct GetBatchHandler {
-    storage: GlobalStorage,
-}
+/// Gets a batch of values by the provided range of keys.
+pub(crate) fn handle(ranges: &[Range], storage: &GlobalStorage) -> AppResult<Response> {
+    let storage_guard = storage.lock().unwrap();
 
-impl GetBatchHandler {
-    pub(crate) fn handle(&mut self, request: &Request) -> AppResult<Response> {
-        let storage = self.storage.lock().unwrap();
-
-        if matches!(request, Request::GetBatch(_)) {
-            if let Request::GetBatch(ranges) = request {
-                let mut values = Vec::new();
-                for range in ranges {
-                    let range_values = storage.get_values(range.start, range.end);
-                    values.extend(range_values);
-                }
-
-                let response_array = values.iter().map(|val| val.as_str().to_string()).collect();
-
-                return Ok(Response::Array(response_array));
-            }
-            return Ok(Response::String("Wrong handler!".to_string()));
-        }
-
-        Ok(Response::String("Wrong handler!".to_string()))
+    let mut values = Vec::new();
+    for range in ranges {
+        let range_values = storage_guard.get_values(range.start, range.end);
+        values.extend(range_values);
     }
-}
 
-impl GetBatchHandler {
-    /// Creates a new `GetBatchHandler` with the given global storage.
-    pub fn new(storage: GlobalStorage) -> Self {
-        Self { storage }
-    }
+    let response_array = values.iter().map(|val| val.as_str().to_string()).collect();
+
+    Ok(Response::Array(response_array))
 }

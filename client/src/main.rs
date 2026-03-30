@@ -2,7 +2,7 @@ mod client;
 
 use crate::client::{Client, Settings};
 use shared::consistent_hash_ring::Node;
-use shared::protocol::types::Request;
+use shared::protocol::types::{Entry, Request};
 use std::io::Write;
 use text_colorizer::*;
 
@@ -78,7 +78,29 @@ fn send(client: &mut Client, operation: &str, value: &str) {
     let request;
     match operation {
         "add" => {
-            request = Request::Add(value.to_string());
+            println!("{}: {}", LOG_INFO, "Replication factor: (Empty to skip)");
+            let mut replication_factor_input = String::new();
+            std::io::stdin()
+                .read_line(&mut replication_factor_input)
+                .unwrap();
+            request = match replication_factor_input.trim() {
+                "" => Request::Add(Entry {
+                    value: value.to_string(),
+                    replication_factor: None,
+                }),
+                _ => {
+                    let replication_factor = replication_factor_input
+                        .trim()
+                        .parse::<u32>()
+                        .ok()
+                        .or(Some(0))
+                        .unwrap();
+                    Request::Add(Entry {
+                        value: value.to_string(),
+                        replication_factor: Some(replication_factor as usize),
+                    })
+                }
+            };
         }
         "check" => {
             request = Request::Check(value.to_string());

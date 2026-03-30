@@ -1,47 +1,27 @@
 //! Handler for the "drop batch" command.
 
 use crate::storage::{GlobalStorage, Storage};
+use shared::consistent_hash_ring::Range;
 use shared::error::AppResult;
-use shared::protocol::types::{Request, Response};
+use shared::protocol::types::Response;
 
-/// A handler that drops value by the provided range of keys.
-pub(crate) struct DropBatch {
-    storage: GlobalStorage,
-}
+/// Drops values by the provided range of keys.
+pub(crate) fn handle(ranges: &[Range], storage: &GlobalStorage) -> AppResult<Response> {
+    let mut storage_guard = storage.lock().unwrap();
 
-impl DropBatch {
-    pub(crate) fn handle(&mut self, value: &Request) -> AppResult<Response> {
-        let mut storage = self.storage.lock().unwrap();
+    let mut count = 0;
+    let mut keys = Vec::new();
+    for range in ranges {
+        let range_values = storage_guard.get_keys_in_range(range.start, range.end);
+        keys.extend(range_values);
+    }
 
-        if matches!(value, Request::DropBatch(_)) {
-            if let Request::DropBatch(ranges) = value {
-                let mut count = 0;
-                let mut keys = Vec::new();
-                for range in ranges {
-                    let range_values = storage.get_keys_in_range(range.start, range.end);
-                    keys.extend(range_values);
-                }
-
-                for key in keys {
-                    let result = storage.remove(key);
-                    if result {
-                        count += 1;
-                    }
-                }
-
-                return Ok(Response::String(format!("Removed: {}", count,)));
-            }
-
-            return Ok(Response::String("Removed: 0".to_string()));
+    for key in keys {
+        let result = storage_guard.remove(key);
+        if result {
+            count += 1;
         }
-
-        Ok(Response::String("Wrong handler!".to_string()))
     }
-}
 
-impl DropBatch {
-    /// Creates a new `DropBatch` with the given global storage.
-    pub fn new(storage: GlobalStorage) -> Self {
-        Self { storage }
-    }
+    Ok(Response::String(format!("Removed: {}", count)))
 }
