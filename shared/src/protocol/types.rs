@@ -88,12 +88,18 @@ impl From<u8> for Flags {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum Request {
-    Add(String),
+    Add(Entry),
     Check(String),
     Count,
     GetBatch(Vec<Range>),
     DropBatch(Vec<Range>),
-    AddBatch(Vec<String>),
+    AddBatch(Vec<Entry>),
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct Entry {
+    pub value: String,
+    pub replication_factor: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]

@@ -10,7 +10,10 @@ fn test_send_request() {
     let cursor = Cursor::new(Vec::<u8>::new());
     let mut protocol_writer = ProtocolWriter::new(cursor);
 
-    let request = Request::Add("Test data".to_string());
+    let request = Request::Add(Entry {
+        value: "Test data".to_string(),
+        replication_factor: None,
+    });
     let write_op_result = protocol_writer.send_request(&request);
 
     assert!(write_op_result.is_ok());
@@ -21,5 +24,11 @@ fn test_send_request() {
 
     let request: Request = bincode::deserialize(&body).unwrap();
 
-    assert_eq!(request, Request::Add("Test data".to_string()));
+    assert_eq!(
+        request,
+        Request::Add(Entry {
+            value: "Test data".to_string(),
+            replication_factor: None
+        })
+    );
 }

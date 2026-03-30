@@ -28,7 +28,8 @@ impl Client {
     }
 
     pub fn send(&mut self, request: Request) -> AppResult<Response> {
-        let routing_strategy = self.cluster.route_request(&request);
+        let router = self.cluster.router();
+        let routing_strategy = router.route_request(&request);
 
         println!("Sending request to: {:?}", routing_strategy);
 

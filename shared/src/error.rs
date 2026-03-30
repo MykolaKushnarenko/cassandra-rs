@@ -10,7 +10,7 @@ pub enum Error {
     /// An I/O error occurred during connection handling.
     ConnectionError(Option<std::io::Error>),
     /// The received command is not recognized.
-    UnknownCommand(String),
+    UnknownCommand(),
 }
 
 /// A specialized Result type for application operations.

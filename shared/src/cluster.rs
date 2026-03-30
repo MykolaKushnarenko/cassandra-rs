@@ -1,11 +1,6 @@
 use crate::consistent_hash_ring::ConsistentHashRing;
-use crate::protocol::types::Request;
-
-#[derive(Debug)]
-pub enum RoutingStrategy<'a> {
-    Direct(&'a Node),
-    Fanout(&'a [Node]),
-}
+use crate::replication::ReplicationStrategy;
+pub(crate) use crate::routing::{Router, RoutingStrategy};
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -15,6 +10,18 @@ pub struct Node {
 impl Node {
     pub fn new(address: String) -> Node {
         Node { address }
+    }
+}
+
+impl Into<Node> for String {
+    fn into(self) -> Node {
+        Node::new(self)
+    }
+}
+
+impl Into<Node> for &str {
+    fn into(self) -> Node {
+        Node::new(self.to_string())
     }
 }
 
@@ -29,17 +36,12 @@ impl Cluster {
         }
     }
 
-    pub fn route_request(&self, request: &Request) -> RoutingStrategy<'_> {
-        let strategy = match request {
-            Request::Add(val) | Request::Check(val) => {
-                let hash = ConsistentHashRing::calculate_hash(val);
-                let node = self.ring.get_node(hash);
-                RoutingStrategy::Direct(node)
-            }
-            _ => RoutingStrategy::Fanout(self.ring.get_nodes()),
-        };
+    pub fn router(&self) -> Router<'_> {
+        Router::new(&self.ring)
+    }
 
-        strategy
+    pub fn replication_strategy(&self) -> ReplicationStrategy<'_> {
+        ReplicationStrategy::new(&self.ring)
     }
 
     pub fn drop_node(&mut self, node: &Node) {
@@ -52,9 +54,5 @@ impl Cluster {
 
     pub fn get_ring_entities(&self) -> Vec<(u64, &str)> {
         self.ring.get_entities()
-    }
-
-    pub fn get_nodes(&self) -> &[Node] {
-        self.ring.get_nodes()
     }
 }

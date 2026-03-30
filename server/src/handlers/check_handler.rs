@@ -2,38 +2,16 @@
 
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
-use shared::protocol::types::{Request, Response};
+use shared::protocol::types::Response;
 
-/// A handler that checks if a value exists in the global storage.
-pub struct CheckHandler {
-    storage: GlobalStorage,
-}
+/// Checks if a value exists in the global storage.
+pub(crate) fn handle(value: &String, storage: &GlobalStorage) -> AppResult<Response> {
+    let storage_guard = storage.lock().unwrap();
 
-impl CheckHandler {
-    pub(crate) fn handle(&mut self, request: &Request) -> AppResult<Response> {
-        let storage = self.storage.lock().unwrap();
-
-        if matches!(request, Request::Check(_)) {
-            if let Request::Check(value_ti_check) = request {
-                let result = storage.check(&value_ti_check);
-                if result {
-                    return Ok(Response::Bool(true));
-                }
-
-                return Ok(Response::String(format!(
-                    "Value: {} doesn't exist",
-                    value_ti_check
-                )));
-            }
-        }
-
-        Ok(Response::String("Wrong handler!".to_string()))
+    let exists = storage_guard.check(value);
+    if exists {
+        return Ok(Response::Bool(true));
     }
-}
 
-impl CheckHandler {
-    /// Creates a new `CheckHandler` with the given global storage.
-    pub fn new(storage: GlobalStorage) -> Self {
-        Self { storage }
-    }
+    Ok(Response::String(format!("Value: {} doesn't exist", value)))
 }

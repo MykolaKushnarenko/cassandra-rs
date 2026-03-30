@@ -3,10 +3,10 @@ mod rebalancer;
 use crate::rebalancer::{RebalanceAction, Rebalancer};
 use shared::cluster::Cluster;
 use shared::consistent_hash_ring::Node;
-use shared::protocol::types::Request;
+use shared::protocol::types::{Entry, Request};
 use text_colorizer::Colorize;
 
-const NODES_ARG_KEY: &str = "--nodes=";
+const NODES_ARG_KEY: &str = "nodes=";
 
 const LOG_INFO: &str = "INFO";
 const LOG_VERBOSE: &str = "VERBOSE";
@@ -22,16 +22,21 @@ fn main() {
         "Adding data to the cluster".green().bold()
     );
 
-    for i in 0..3000 {
+    for i in 0..10000 {
         let value = i.to_string();
-        let request = Request::Add(value);
+        let request = Request::Add(Entry {
+            value,
+            replication_factor: None,
+        });
 
-        let strategy = rebalancer.cluster.route_request(&request);
+        let router = rebalancer.cluster.router();
+        let strategy = router.route_request(&request);
         _ = rebalancer.connection_pool.execute(strategy, request, None);
     }
 
     let count_request = Request::Count;
-    let strategy = rebalancer.cluster.route_request(&count_request);
+    let router = rebalancer.cluster.router();
+    let strategy = router.route_request(&count_request);
     let _ = rebalancer
         .connection_pool
         .execute(strategy, count_request, None);
@@ -46,9 +51,7 @@ fn main() {
         println!(
             "{}: {}",
             LOG_INFO.bright_green(),
-            "Enter address of a new node to start rebalancing"
-                .green()
-                .bold()
+            "Enter command (add/drop):".green().bold()
         );
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();

@@ -2,6 +2,7 @@
 
 PORTS=(3000 4000 5001)
 PIDS=()
+NODES=$(IFS=,; echo "${PORTS[*]/#/localhost:}")
 
 cleanup() {
   echo ""
@@ -15,7 +16,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM EXIT
 
 for PORT in "${PORTS[@]}"; do
-  cargo run --bin server -- port="$PORT" > /dev/null 2>&1 &
+  cargo run --bin server -- port="$PORT" nodes="$NODES" > /dev/null 2>&1 &
   PID=$!
   PIDS+=("$PID")
   echo "Starting server on port $PORT (PID: $PID)"

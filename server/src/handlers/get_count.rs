@@ -1,33 +1,12 @@
-//! Handler for the "get bach" command.
+//! Handler for the "get count" command.
 
 use crate::storage::{GlobalStorage, Storage};
 use shared::error::AppResult;
-use shared::protocol::types::{Request, Response};
+use shared::protocol::types::Response;
 
-/// A handler that gets a batch of values by the provided range of keys.
-pub(crate) struct GetCountHandler {
-    storage: GlobalStorage,
-}
-
-impl GetCountHandler {
-    pub(crate) fn handle(&mut self, request: &Request) -> AppResult<Response> {
-        let storage = self.storage.lock().unwrap();
-
-        if matches!(request, Request::Count) {
-            if let Request::Count = request {
-                let count = storage.get_count();
-                return Ok(Response::String(format!("Count: {}", count)));
-            }
-            return Ok(Response::String("Wrong handler!".to_string()));
-        }
-
-        Ok(Response::String("Wrong handler!".to_string()))
-    }
-}
-
-impl GetCountHandler {
-    /// Creates a new `GetCountHandler` with the given global storage.
-    pub fn new(storage: GlobalStorage) -> Self {
-        Self { storage }
-    }
+/// Gets the count of values in storage.
+pub(crate) fn handle(storage: &GlobalStorage) -> AppResult<Response> {
+    let storage_guard = storage.lock().unwrap();
+    let count = storage_guard.get_count();
+    Ok(Response::String(format!("Count: {}", count)))
 }
